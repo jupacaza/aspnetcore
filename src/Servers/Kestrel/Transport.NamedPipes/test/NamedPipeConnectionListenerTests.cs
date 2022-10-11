@@ -34,9 +34,9 @@ public class NamedPipeConnectionListenerTests : TestApplicationErrorLoggerLogged
         await clientStream1.ConnectAsync();
 
         var serverConnection1 = await acceptTask1.DefaultTimeout();
-        Assert.False(serverConnection1.ConnectionClosed.IsCancellationRequested);
+        Assert.False(serverConnection1.ConnectionClosed.IsCancellationRequested, "Connection 1 should be open");
         await serverConnection1.DisposeAsync().AsTask().DefaultTimeout();
-        Assert.True(serverConnection1.ConnectionClosed.IsCancellationRequested);
+        Assert.True(serverConnection1.ConnectionClosed.IsCancellationRequested, "Connection 1 should be closed");
 
         // Stream 2
         var acceptTask2 = connectionListener.AcceptAsync();
@@ -44,9 +44,9 @@ public class NamedPipeConnectionListenerTests : TestApplicationErrorLoggerLogged
         await clientStream2.ConnectAsync();
 
         var serverConnection2 = await acceptTask2.DefaultTimeout();
-        Assert.False(serverConnection2.ConnectionClosed.IsCancellationRequested);
+        Assert.False(serverConnection2.ConnectionClosed.IsCancellationRequested, "Connection 2 should be open");
         await serverConnection2.DisposeAsync().AsTask().DefaultTimeout();
-        Assert.True(serverConnection2.ConnectionClosed.IsCancellationRequested);
+        Assert.True(serverConnection2.ConnectionClosed.IsCancellationRequested, "Connection 2 should be closed");
     }
 
     [Fact]

@@ -65,18 +65,35 @@ internal sealed class NamedPipeConnectionListener : IConnectionListener
         {
             while (true)
             {
-                var stream = nextStream;
-                
                 try
                 {
-                    _listeningToken.ThrowIfCancellationRequested();
+                    // Backlog is full. Wait for space before accepting new connections.
+                    if (await _acceptedQueue.Writer.WaitToWriteAsync(_listeningToken))
+                    {
+                        var stream = nextStream;
 
-                    await stream.WaitForConnectionAsync(_listeningToken);
+                        await stream.WaitForConnectionAsync(_listeningToken);
 
-                    // Create the next stream before writing connected stream to the channel.
-                    // This ensures there is always a created stream and another process can't
-                    // create a stream with the same name with different a access policy.
-                    nextStream = CreateServerStream();
+                        var connection = new NamedPipeConnection(stream, _endpoint, _log, _memoryPool, _inputOptions, _outputOptions);
+
+                        if (await _acceptedQueue.Writer.WaitToWriteAsync(_listeningToken))
+                        {
+                            // Create the next stream before writing connected stream to the channel.
+                            // This ensures there is always a created stream and another process can't
+                            // create a stream with the same name with different a access policy.
+                            nextStream = CreateServerStream();
+
+                            connection.Start();
+
+                            // One writer so will always succeed.
+                            _acceptedQueue.Writer.TryWrite(connection);
+                        }
+                    }
+                    else
+                    {
+                        // Writer is no longer accepting connections.
+                        break;
+                    }
                 }
                 catch (OperationCanceledException ex) when (_listeningToken.IsCancellationRequested)
                 {
@@ -84,20 +101,9 @@ internal sealed class NamedPipeConnectionListener : IConnectionListener
                     NamedPipeLog.ConnectionListenerAborted(_log, ex);
                     break;
                 }
-
-                var connection = new NamedPipeConnection(stream, _endpoint, _log, _memoryPool, _inputOptions, _outputOptions);
-
-                if (_acceptedQueue.Writer.TryWrite(connection))
-                {
-                    connection.Start();
-                }
-                else
-                {
-                    // Backlog is full. Reject connection.
-                    await connection.DisposeAsync();
-                }
             }
 
+            nextStream.Dispose();
             _acceptedQueue.Writer.TryComplete();
         }
         catch (Exception ex)
@@ -115,15 +121,29 @@ internal sealed class NamedPipeConnectionListener : IConnectionListener
             pipeOptions |= NamedPipeOptions.CurrentUserOnly;
         }
 
-        stream = NamedPipeServerStreamAcl.Create(
-            _endpoint.PipeName,
-            PipeDirection.InOut,
-            NamedPipeServerStream.MaxAllowedServerInstances,
-            PipeTransmissionMode.Byte,
-            pipeOptions,
-            inBufferSize: 0, // Buffer in System.IO.Pipelines
-            outBufferSize: 0, // Buffer in System.IO.Pipelines
-            _options.PipeSecurity);
+        if (_options.PipeSecurity != null)
+        {
+            stream = NamedPipeServerStreamAcl.Create(
+                _endpoint.PipeName,
+                PipeDirection.InOut,
+                NamedPipeServerStream.MaxAllowedServerInstances,
+                PipeTransmissionMode.Byte,
+                pipeOptions,
+                inBufferSize: 0, // Buffer in System.IO.Pipelines
+                outBufferSize: 0, // Buffer in System.IO.Pipelines
+                _options.PipeSecurity);
+        }
+        else
+        {
+            stream = new NamedPipeServerStream(
+                _endpoint.PipeName,
+                PipeDirection.InOut,
+                NamedPipeServerStream.MaxAllowedServerInstances,
+                PipeTransmissionMode.Byte,
+                pipeOptions,
+                inBufferSize: 0,
+                outBufferSize: 0);
+        }
         return stream;
     }
 

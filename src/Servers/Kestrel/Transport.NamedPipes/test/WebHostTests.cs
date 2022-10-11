@@ -92,6 +92,7 @@ public class WebHostTests : LoggedTest
                     ps.AddAccessRule(new PipeAccessRule("Users", PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
 
                     options.PipeSecurity = ps;
+                    options.CurrentUserOnly = false;
                 });
                 webHostBuilder
                     .UseKestrel(o =>

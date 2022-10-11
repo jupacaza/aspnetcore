@@ -25,12 +25,18 @@ internal sealed class NamedPipeTransportFactory : IConnectionListenerFactory
 
     public ValueTask<IConnectionListener> BindAsync(EndPoint endpoint, CancellationToken cancellationToken = default)
     {
-        if (endpoint is not NamedPipeEndPoint np)
+        ArgumentNullException.ThrowIfNull(endpoint);
+        
+        if (endpoint is not NamedPipeEndPoint namedPipeEndPoint)
         {
             throw new NotSupportedException($"{endpoint.GetType()} is not supported.");
         }
+        if (namedPipeEndPoint.ServerName != NamedPipeEndPoint.LocalComputerServerName)
+        {
+            throw new NotSupportedException($@"Server name '{namedPipeEndPoint.ServerName}' is invalid. The server name must be ""."".");
+        }
 
-        var listener = new NamedPipeConnectionListener(np, _options, _loggerFactory);
+        var listener = new NamedPipeConnectionListener(namedPipeEndPoint, _options, _loggerFactory);
         return new ValueTask<IConnectionListener>(listener);
     }
 }

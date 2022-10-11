@@ -9,6 +9,7 @@ using System.Threading.Channels;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.Extensions.Logging;
 using PipeOptions = System.IO.Pipelines.PipeOptions;
+using NamedPipeOptions = System.IO.Pipes.PipeOptions;
 
 namespace Microsoft.AspNetCore.Server.Kestrel.Transport.NamedPipes.Internal;
 
@@ -62,12 +63,18 @@ internal sealed class NamedPipeConnectionListener : IConnectionListener
                 {
                     _listeningToken.ThrowIfCancellationRequested();
 
+                    var pipeOptions = NamedPipeOptions.Asynchronous | NamedPipeOptions.WriteThrough;
+                    if (_options.CurrentUserOnly)
+                    {
+                        pipeOptions |= NamedPipeOptions.CurrentUserOnly;
+                    }
+
                     stream = NamedPipeServerStreamAcl.Create(
                         _endpoint.PipeName,
                         PipeDirection.InOut,
                         NamedPipeServerStream.MaxAllowedServerInstances,
                         PipeTransmissionMode.Byte,
-                        _endpoint.PipeOptions,
+                        pipeOptions,
                         inBufferSize: 0, // Buffer in System.IO.Pipelines
                         outBufferSize: 0, // Buffer in System.IO.Pipelines
                         _options.PipeSecurity);

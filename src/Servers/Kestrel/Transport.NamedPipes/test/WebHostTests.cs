@@ -267,7 +267,7 @@ public class WebHostTests : LoggedTest
             };
 
             // Act
-            var response = await client.SendAsync(request);
+            var response = await client.SendAsync(request).DefaultTimeout();
 
             // Assert
             response.EnsureSuccessStatusCode();

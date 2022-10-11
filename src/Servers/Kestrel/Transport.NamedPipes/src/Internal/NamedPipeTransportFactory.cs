@@ -2,7 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Net;
+using System.Threading;
 using Microsoft.AspNetCore.Connections;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -36,7 +38,20 @@ internal sealed class NamedPipeTransportFactory : IConnectionListenerFactory
             throw new NotSupportedException($@"Server name '{namedPipeEndPoint.ServerName}' is invalid. The server name must be ""."".");
         }
 
-        var listener = new NamedPipeConnectionListener(namedPipeEndPoint, _options, _loggerFactory);
+        // Creating a named pipe server with an name isn't exclusive. Create a mutex with the pipe name to prevent multiple endpoints
+        // accidently sharing the same pipe name. Will detect across Kestrel processes.
+        // Note that this doesn't prevent other applications from using the pipe name.
+        var mutexName = "Kestrel-NamedPipe-" + namedPipeEndPoint.PipeName;
+        var mutex = new Mutex(false, mutexName, out var createdNew);
+        if (!createdNew)
+        {
+            mutex.Dispose();
+            throw new AddressInUseException($"Named pipe '{namedPipeEndPoint.PipeName}' is already in use by Kestrel.");
+        }
+
+        var listener = new NamedPipeConnectionListener(namedPipeEndPoint, _options, _loggerFactory, mutex);
+        listener.Start();
+        
         return new ValueTask<IConnectionListener>(listener);
     }
 }

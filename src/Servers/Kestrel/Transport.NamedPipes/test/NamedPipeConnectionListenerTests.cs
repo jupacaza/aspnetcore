@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Server.Kestrel.Transport.NamedPipes.Internal;
 using Microsoft.AspNetCore.Testing;
 
@@ -27,19 +28,25 @@ public class NamedPipeConnectionListenerTests : TestApplicationErrorLoggerLogged
         // Arrange
         await using var connectionListener = await NamedPipeTestHelpers.CreateConnectionListenerFactory(LoggerFactory);
 
-        // Act
-        var acceptTask = connectionListener.AcceptAsync();
+        // Stream 1
+        var acceptTask1 = connectionListener.AcceptAsync();
+        await using var clientStream1 = NamedPipeTestHelpers.CreateClientStream(connectionListener.EndPoint);
+        await clientStream1.ConnectAsync();
 
-        await using var clientStream = NamedPipeTestHelpers.CreateClientStream(connectionListener.EndPoint);
-        await clientStream.ConnectAsync();
+        var serverConnection1 = await acceptTask1.DefaultTimeout();
+        Assert.False(serverConnection1.ConnectionClosed.IsCancellationRequested);
+        await serverConnection1.DisposeAsync().AsTask().DefaultTimeout();
+        Assert.True(serverConnection1.ConnectionClosed.IsCancellationRequested);
 
-        // Assert
-        var serverConnection = await acceptTask.DefaultTimeout();
-        Assert.False(serverConnection.ConnectionClosed.IsCancellationRequested);
+        // Stream 2
+        var acceptTask2 = connectionListener.AcceptAsync();
+        await using var clientStream2 = NamedPipeTestHelpers.CreateClientStream(connectionListener.EndPoint);
+        await clientStream2.ConnectAsync();
 
-        await serverConnection.DisposeAsync().AsTask().DefaultTimeout();
-
-        Assert.True(serverConnection.ConnectionClosed.IsCancellationRequested);
+        var serverConnection2 = await acceptTask2.DefaultTimeout();
+        Assert.False(serverConnection2.ConnectionClosed.IsCancellationRequested);
+        await serverConnection2.DisposeAsync().AsTask().DefaultTimeout();
+        Assert.True(serverConnection2.ConnectionClosed.IsCancellationRequested);
     }
 
     [Fact]
@@ -76,15 +83,27 @@ public class NamedPipeConnectionListenerTests : TestApplicationErrorLoggerLogged
         Assert.Contains(LogMessages, m => m.EventId.Name == "ConnectionListenerAborted");
     }
 
-    [Fact(Skip = "No warning when dupliate pipe name used with server?")]
+    [Fact]
     public async Task BindAsync_ListenersSharePort_ThrowAddressInUse()
     {
         // Arrange
-        await using var connectionListener = await NamedPipeTestHelpers.CreateConnectionListenerFactory(LoggerFactory);
+        await using var connectionListener1 = await NamedPipeTestHelpers.CreateConnectionListenerFactory(LoggerFactory);
+        var pipeName = ((NamedPipeEndPoint)connectionListener1.EndPoint).PipeName;
 
         // Act & Assert
-        var pipeName = ((NamedPipeEndPoint)connectionListener.EndPoint).PipeName;
+        await Assert.ThrowsAsync<AddressInUseException>(() => NamedPipeTestHelpers.CreateConnectionListenerFactory(LoggerFactory, pipeName: pipeName));
+    }
 
-        await Assert.ThrowsAsync<Exception>(() => NamedPipeTestHelpers.CreateConnectionListenerFactory(LoggerFactory, pipeName: pipeName));
+    [Fact]
+    public async Task BindAsync_ListenersSharePort_DisposeFirstListener_Success()
+    {
+        // Arrange
+        var connectionListener1 = await NamedPipeTestHelpers.CreateConnectionListenerFactory(LoggerFactory);
+        var pipeName = ((NamedPipeEndPoint)connectionListener1.EndPoint).PipeName;
+        await connectionListener1.DisposeAsync();
+
+        // Act & Assert
+        await using var connectionListener2 = await NamedPipeTestHelpers.CreateConnectionListenerFactory(LoggerFactory, pipeName: pipeName);
+        Assert.Equal(connectionListener1.EndPoint, connectionListener2.EndPoint);
     }
 }

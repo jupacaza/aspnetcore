@@ -90,6 +90,7 @@ public static class TestData
                 "Microsoft.AspNetCore.Server.Kestrel",
                 "Microsoft.AspNetCore.Server.Kestrel.Core",
                 "Microsoft.AspNetCore.Server.Kestrel.Transport.Quic",
+                "Microsoft.AspNetCore.Server.Kestrel.Transport.NamedPipes",
                 "Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets",
                 "Microsoft.AspNetCore.Session",
                 "Microsoft.AspNetCore.SignalR",
